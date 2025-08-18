@@ -1146,4 +1146,21 @@ export default {
   background-color: rgba(16, 185, 129, 0.3) !important;
   color: #065f46 !important;
 }
+
+/* 插入表格选择器的绿色主题 */
+:deep(.toastui-editor-popup-add-table .toastui-editor-table-cell:hover) {
+  background-color: #10b981 !important;
+  color: white !important;
+}
+
+:deep(.toastui-editor-popup-add-table .toastui-editor-table-cell.header:hover) {
+  background-color: #059669 !important;
+  color: white !important;
+}
+
+/* 表格选择区域的绿色边框和背景 */
+:deep(.toastui-editor-popup-add-table .toastui-editor-table-selection-layer) {
+  background-color: rgba(16, 185, 129, 0.3) !important;
+  border: 2px solid #10b981 !important;
+}
 </style>
