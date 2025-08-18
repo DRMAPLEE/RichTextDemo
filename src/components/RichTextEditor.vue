@@ -1,6 +1,89 @@
 <template>
-  <div class="rich-text-editor">
-    <div id="editor"></div>
+  <div class="w-full max-w-6xl mx-auto p-5">
+    <!-- 导出工具栏 -->
+    <div class="export-toolbar">
+      <button @click="showExportDialog" class="export-button" :disabled="isExporting">
+        <span v-if="!isExporting" class="flex items-center gap-1.5">
+          <span class="export-icon">📤</span>
+          导出文档
+        </span>
+        <span v-else class="flex items-center gap-1.5">
+          <span class="loading-spinner"></span>
+          导出中...
+        </span>
+      </button>
+    </div>
+
+    <!-- 导出弹窗 -->
+    <div v-if="exportDialogVisible" class="export-dialog-backdrop" @click="closeExportDialog">
+      <div class="export-dialog-content" @click.stop>
+        <div class="dialog-header">
+          <h3 class="dialog-title">导出文档</h3>
+          <button @click="closeExportDialog" class="dialog-close-button">×</button>
+        </div>
+
+        <div class="dialog-body">
+          <div class="form-group">
+            <label for="filename" class="form-label">文件名：</label>
+            <input
+              id="filename"
+              v-model="exportSettings.filename"
+              type="text"
+              class="form-input"
+              placeholder="请输入文件名"
+              @keyup.enter="handleExport"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">导出格式：</label>
+            <div class="format-options">
+              <label class="format-option">
+                <input
+                  type="radio"
+                  v-model="exportSettings.format"
+                  value="pdf"
+                  name="format"
+                  class="format-radio"
+                />
+                <span class="format-content">
+                  <span class="format-icon">📄</span>
+                  PDF格式
+                </span>
+              </label>
+              <label class="format-option">
+                <input
+                  type="radio"
+                  v-model="exportSettings.format"
+                  value="word"
+                  name="format"
+                  class="format-radio"
+                />
+                <span class="format-content">
+                  <span class="format-icon">📝</span>
+                  Word格式
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="dialog-footer">
+          <button @click="closeExportDialog" class="dialog-button dialog-button-cancel">
+            取消
+          </button>
+          <button
+            @click="handleExport"
+            class="dialog-button dialog-button-primary"
+            :disabled="!exportSettings.filename.trim()"
+          >
+            确认导出
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="editor" class="rounded-lg overflow-hidden"></div>
   </div>
 </template>
 
@@ -8,6 +91,9 @@
 import { Editor } from '@toast-ui/editor'
 import '@toast-ui/editor/dist/toastui-editor.css'
 import { convertToMarkdown } from '../../convert-to-markdown'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 
 const inputText = `<思考>分析数据后发现，各地区客户数量和总销售额存在显著差异。北京和广东的客户数量最多，均为3个，且总销售额也是最高的；而上海、四川、天津、浙江和重庆的客户数量较少，多为1个。这表明北京和广东是主要的销售市场，具有较高的客户集中度和销售额。</思考>
 
@@ -123,6 +209,12 @@ export default {
   data() {
     return {
       markdownResult: '# 正在生成图表...\n\n请稍候，图表正在渲染中...',
+      isExporting: false,
+      exportDialogVisible: false,
+      exportSettings: {
+        filename: '富文本内容',
+        format: 'pdf',
+      },
     }
   },
   async mounted() {
@@ -326,6 +418,296 @@ export default {
     // 将编辑器实例保存到组件实例中，以便后续使用
     this.editor = editor
   },
+  methods: {
+    // 显示导出弹窗
+    showExportDialog() {
+      this.exportDialogVisible = true
+      // 默认设置文件名为当前时间
+      const now = new Date()
+      const timestamp = now
+        .toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+        .replace(/[\/\s:]/g, '-')
+      this.exportSettings.filename = `富文本内容-${timestamp}`
+    },
+
+    // 关闭导出弹窗
+    closeExportDialog() {
+      this.exportDialogVisible = false
+    },
+
+    // 处理导出操作
+    async handleExport() {
+      if (!this.exportSettings.filename.trim()) {
+        alert('请输入文件名')
+        return
+      }
+
+      this.closeExportDialog()
+
+      if (this.exportSettings.format === 'pdf') {
+        await this.exportToPDF(this.exportSettings.filename)
+      } else if (this.exportSettings.format === 'word') {
+        await this.exportToWord(this.exportSettings.filename)
+      }
+    },
+
+    // 导出为PDF
+    async exportToPDF(customFilename = '富文本内容') {
+      if (!this.editor) return
+
+      try {
+        this.isExporting = true
+
+        // 获取编辑器的HTML内容
+        const editorContent = this.editor.getHTML()
+
+        // 创建一个临时div用于渲染内容
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = editorContent
+
+        // A4纸张比例：210mm x 297mm，减去边距后的有效宽度约为170mm
+        // 按96dpi计算，170mm约等于640px
+        const renderWidth = 640
+        const padding = 40
+
+        tempDiv.style.cssText = `
+          position: absolute;
+          left: -9999px;
+          top: 0;
+          width: ${renderWidth}px;
+          padding: ${padding}px;
+          margin: 0;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+          background: white;
+          color: black;
+          line-height: 1.6;
+          font-size: 14px;
+          box-sizing: border-box;
+        `
+
+        // 处理图片大小
+        const images = tempDiv.querySelectorAll('img')
+        images.forEach((img) => {
+          img.style.maxWidth = '100%'
+          img.style.height = 'auto'
+          img.style.display = 'block'
+          img.style.margin = '10px 0'
+        })
+
+        document.body.appendChild(tempDiv)
+
+        // 等待图片加载完成
+        const imagePromises = Array.from(images).map((img) => {
+          return new Promise((resolve) => {
+            if (img.complete) {
+              resolve()
+            } else {
+              img.onload = resolve
+              img.onerror = resolve
+            }
+          })
+        })
+        await Promise.all(imagePromises)
+
+        // 使用html2canvas转换为图片
+        const canvas = await html2canvas(tempDiv, {
+          scale: 1.5, // 适中的缩放比例，平衡质量和文件大小
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          width: renderWidth + padding * 2,
+          height: tempDiv.scrollHeight,
+          logging: false,
+          imageTimeout: 15000,
+        })
+
+        // 创建PDF
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4',
+        })
+
+        // A4尺寸: 210 x 297 mm，留出边距
+        const pdfWidth = 210
+        const pdfHeight = 297
+        const margin = 20
+        const contentWidth = pdfWidth - margin * 2
+        const contentHeight = pdfHeight - margin * 2
+
+        // 计算图片在PDF中的实际尺寸
+        const imgWidth = contentWidth
+        const imgHeight = (canvas.height * contentWidth) / canvas.width
+
+        let yPosition = 0
+        let remainingHeight = imgHeight
+
+        // 分页处理
+        while (remainingHeight > 0) {
+          // 如果不是第一页，添加新页面
+          if (yPosition > 0) {
+            pdf.addPage()
+          }
+
+          // 计算当前页面可以容纳的高度
+          const currentPageHeight = Math.min(remainingHeight, contentHeight)
+
+          // 计算源图片的裁剪位置
+          const sourceY = (imgHeight - remainingHeight) * (canvas.width / contentWidth)
+          const sourceHeight = currentPageHeight * (canvas.width / contentWidth)
+
+          // 创建裁剪后的canvas
+          const pageCanvas = document.createElement('canvas')
+          const pageCtx = pageCanvas.getContext('2d')
+          pageCanvas.width = canvas.width
+          pageCanvas.height = sourceHeight
+
+          pageCtx.drawImage(
+            canvas,
+            0,
+            sourceY,
+            canvas.width,
+            sourceHeight,
+            0,
+            0,
+            canvas.width,
+            sourceHeight,
+          )
+
+          // 添加到PDF
+          pdf.addImage(
+            pageCanvas.toDataURL('image/jpeg', 0.85),
+            'JPEG',
+            margin,
+            margin,
+            imgWidth,
+            currentPageHeight,
+          )
+
+          remainingHeight -= currentPageHeight
+          yPosition += currentPageHeight
+        }
+
+        // 保存PDF
+        pdf.save(`${customFilename}.pdf`)
+
+        // 清理临时元素
+        document.body.removeChild(tempDiv)
+      } catch (error) {
+        console.error('PDF导出失败:', error)
+        alert('PDF导出失败，请重试')
+      } finally {
+        this.isExporting = false
+      }
+    },
+
+    // 导出为Word
+    async exportToWord(customFilename = '富文本内容') {
+      if (!this.editor) return
+
+      try {
+        this.isExporting = true
+
+        // 获取编辑器的Markdown内容
+        const markdownContent = this.editor.getMarkdown()
+
+        // 简单的Markdown到Word转换
+        const paragraphs = this.convertMarkdownToWordElements(markdownContent)
+
+        // 创建Word文档
+        const doc = new Document({
+          sections: [
+            {
+              properties: {},
+              children: paragraphs,
+            },
+          ],
+        })
+
+        // 生成并下载Word文档
+        const buffer = await Packer.toBuffer(doc)
+        const blob = new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        })
+
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${customFilename}.docx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } catch (error) {
+        console.error('Word导出失败:', error)
+        alert('Word导出失败，请重试')
+      } finally {
+        this.isExporting = false
+      }
+    },
+
+    // 将Markdown内容转换为Word元素
+    convertMarkdownToWordElements(markdown) {
+      const lines = markdown.split('\n')
+      const paragraphs = []
+
+      for (const line of lines) {
+        if (line.trim() === '') {
+          paragraphs.push(new Paragraph({ children: [new TextRun(' ')] }))
+          continue
+        }
+
+        // 处理标题
+        if (line.startsWith('# ')) {
+          paragraphs.push(
+            new Paragraph({
+              heading: HeadingLevel.HEADING_1,
+              children: [new TextRun(line.substring(2))],
+            }),
+          )
+        } else if (line.startsWith('## ')) {
+          paragraphs.push(
+            new Paragraph({
+              heading: HeadingLevel.HEADING_2,
+              children: [new TextRun(line.substring(3))],
+            }),
+          )
+        } else if (line.startsWith('### ')) {
+          paragraphs.push(
+            new Paragraph({
+              heading: HeadingLevel.HEADING_3,
+              children: [new TextRun(line.substring(4))],
+            }),
+          )
+        } else {
+          // 处理普通段落
+          const textRuns = []
+          let currentText = line
+
+          // 简单处理粗体和斜体
+          const boldRegex = /\*\*(.*?)\*\*/g
+          const italicRegex = /\*(.*?)\*/g
+
+          // 这里简化处理，实际应用中可能需要更复杂的解析
+          textRuns.push(
+            new TextRun(currentText.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1')),
+          )
+
+          paragraphs.push(new Paragraph({ children: textRuns }))
+        }
+      }
+
+      return paragraphs
+    },
+  },
+
   beforeUnmount() {
     // 组件销毁前销毁编辑器实例
     if (this.editor) {
@@ -336,16 +718,432 @@ export default {
 </script>
 
 <style scoped>
-.rich-text-editor {
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+/* 导出工具栏样式 */
+.export-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-#editor {
-  border: 1px solid #ddd;
+.export-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
   border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+  position: relative;
   overflow: hidden;
+}
+
+.export-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.export-button:active:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
+}
+
+.export-button:disabled {
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.export-icon {
+  font-size: 16px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+/* 加载动画 */
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* 导出弹窗样式 */
+.export-dialog-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.3s ease-out;
+}
+
+.export-dialog-content {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  margin: 20px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  animation: slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 弹窗关闭按钮 */
+.dialog-close-button {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: #6b7280;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.dialog-close-button:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+/* 弹窗布局区域 */
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.dialog-body {
+  padding: 24px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+}
+
+/* 弹窗按钮样式 */
+.dialog-button {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.dialog-button-cancel {
+  background: transparent;
+  color: #6b7280;
+  border-color: #6b7280;
+}
+
+.dialog-button-cancel:hover {
+  background: #6b7280;
+  color: white;
+}
+
+.dialog-button-primary {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+}
+
+.dialog-button-primary:hover:not(:disabled) {
+  background: #059669;
+  border-color: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.dialog-button-primary:disabled {
+  background: #9ca3af;
+  border-color: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 表单样式 */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #374151;
+  font-size: 14px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+/* 格式选择样式 */
+.format-options {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.format-option {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 12px 16px;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  min-width: 140px;
+  flex: 1;
+}
+
+.format-option:hover {
+  border-color: #10b981;
+  background-color: #f0fdf4;
+}
+
+.format-option:has(.format-radio:checked) {
+  border-color: #10b981;
+  background-color: #f0fdf4;
+}
+
+.format-radio {
+  margin-right: 12px;
+  cursor: pointer;
+}
+
+.format-content {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.format-icon {
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 动画类已整合到组件样式中 */
+
+/* 移动端响应式样式 */
+@media (max-width: 768px) {
+  /* 移动端导出工具栏样式 */
+  .export-toolbar {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .export-button {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 20px;
+    font-size: 16px;
+  }
+
+  /* 移动端弹窗样式 */
+  .export-dialog-content {
+    width: 95%;
+    max-width: none;
+    margin: 10px;
+    max-height: 95vh;
+  }
+
+  /* 移动端弹窗布局调整 */
+  .dialog-header {
+    padding: 16px 20px;
+  }
+
+  .dialog-title {
+    font-size: 16px;
+  }
+
+  .dialog-body {
+    padding: 20px;
+  }
+
+  .dialog-footer {
+    padding: 16px 20px;
+    flex-direction: column-reverse;
+    gap: 12px;
+  }
+
+  .dialog-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 移动端表单样式 */
+  .format-options {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .format-option {
+    min-width: auto;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .export-dialog-content {
+    width: 98%;
+    margin: 5px;
+    border-radius: 12px;
+  }
+
+  .dialog-header,
+  .dialog-body,
+  .dialog-footer {
+    padding: 12px 16px;
+  }
+}
+
+/* 移动端优化 */
+.dialog-button,
+.format-option {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 防止iOS输入框缩放 */
+.form-input {
+  font-size: 16px;
+}
+/* 使用 :deep() 选择器来穿透组件作用域 */
+:deep(.ProseMirror-selectednode) {
+  outline: 2px solid #10b981 !important;
+}
+
+:deep(.toastui-editor-contents td.toastui-editor-cell-selected) {
+  background-color: #d1fae5 !important;
+  outline: 2px solid #10b981 !important;
+}
+
+:deep(.toastui-editor-contents th.toastui-editor-cell-selected) {
+  background-color: #a7f3d0 !important;
+  outline: 2px solid #10b981 !important;
+}
+
+/* 工具栏图标选中状态 - 改变图标颜色为绿色 */
+:deep(.toastui-editor-toolbar-icons:not(:disabled).active) {
+  background-position-y: -23px;
+  filter: brightness(0) saturate(100%) invert(44%) sepia(79%) saturate(2476%) hue-rotate(142deg)
+    brightness(97%) contrast(94%);
+}
+
+/* 工具栏图标悬停效果 - 背景透明 */
+:deep(.toastui-editor-toolbar-icons:not(:disabled):hover) {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+  border-radius: 4px;
+}
+
+/* 富文本编辑器内选中文本的颜色 */
+:deep(.ProseMirror ::selection) {
+  background-color: rgba(16, 185, 129, 0.3) !important;
+  color: #065f46 !important;
+}
+
+:deep(.ProseMirror ::-moz-selection) {
+  background-color: rgba(16, 185, 129, 0.3) !important;
+  color: #065f46 !important;
+}
+
+/* Markdown编辑模式下的选中文本 */
+:deep(.toastui-editor-md-container ::selection) {
+  background-color: rgba(16, 185, 129, 0.3) !important;
+  color: #065f46 !important;
+}
+
+:deep(.toastui-editor-md-container ::-moz-selection) {
+  background-color: rgba(16, 185, 129, 0.3) !important;
+  color: #065f46 !important;
 }
 </style>
