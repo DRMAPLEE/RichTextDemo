@@ -93,7 +93,8 @@ import '@toast-ui/editor/dist/toastui-editor.css'
 import { convertToMarkdown } from '../../convert-to-markdown'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
-import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } from 'docx'
+import MarkdownIt from 'markdown-it'
 
 const inputText = `<思考>分析数据后发现，各地区客户数量和总销售额存在显著差异。北京和广东的客户数量最多，均为3个，且总销售额也是最高的；而上海、四川、天津、浙江和重庆的客户数量较少，多为1个。这表明北京和广东是主要的销售市场，具有较高的客户集中度和销售额。</思考>
 
@@ -614,12 +615,29 @@ export default {
 
       try {
         this.isExporting = true
+        console.log('开始Word导出...')
 
         // 获取编辑器的Markdown内容
         const markdownContent = this.editor.getMarkdown()
+        console.log('获取到的Markdown内容:', markdownContent)
+
+        if (!markdownContent) {
+          alert('警告：获取到的Markdown内容为空')
+          console.log('编辑器状态:', this.editor)
+        }
+
+        // 检查markdown中是否包含图片
+        const hasImages = markdownContent.includes('![') && markdownContent.includes('data:image/')
+        console.log('Markdown中是否包含图片:', hasImages)
+        if (hasImages) {
+          const imageMatches = markdownContent.match(/!\[([^\]]*)\]\(([^)]+)\)/g)
+          console.log('找到的图片标签:', imageMatches)
+        }
 
         // 简单的Markdown到Word转换
+        console.log('开始转换Markdown到Word元素...')
         const paragraphs = this.convertMarkdownToWordElements(markdownContent)
+        console.log('转换完成，段落数量:', paragraphs.length)
 
         // 创建Word文档
         const doc = new Document({
@@ -632,10 +650,9 @@ export default {
         })
 
         // 生成并下载Word文档
-        const buffer = await Packer.toBuffer(doc)
-        const blob = new Blob([buffer], {
-          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        })
+        console.log('开始生成Word文档...')
+        const blob = await Packer.toBlob(doc)
+        console.log('Word文档生成完成，大小:', blob.size, 'bytes')
 
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -645,6 +662,7 @@ export default {
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
+        console.log('Word文档下载完成')
       } catch (error) {
         console.error('Word导出失败:', error)
         alert('Word导出失败，请重试')
@@ -655,56 +673,421 @@ export default {
 
     // 将Markdown内容转换为Word元素
     convertMarkdownToWordElements(markdown) {
-      const lines = markdown.split('\n')
+      console.log('convertMarkdownToWordElements被调用，markdown长度:', markdown.length)
+      const md = new MarkdownIt()
+      const tokens = md.parse(markdown, {})
+      console.log('markdown-it解析完成，token数量:', tokens.length)
+      console.log('前5个tokens:', tokens.slice(0, 5))
       const paragraphs = []
 
-      for (const line of lines) {
-        if (line.trim() === '') {
-          paragraphs.push(new Paragraph({ children: [new TextRun(' ')] }))
-          continue
-        }
+      // 先检查所有token中是否有图片相关的
+      const imageTokens = tokens.filter(
+        (token) =>
+          token.type === 'image' ||
+          (token.type === 'inline' &&
+            token.children &&
+            token.children.some((child) => child.type === 'image')),
+      )
+      console.log('找到的图片相关tokens:', imageTokens)
 
-        // 处理标题
-        if (line.startsWith('# ')) {
-          paragraphs.push(
-            new Paragraph({
-              heading: HeadingLevel.HEADING_1,
-              children: [new TextRun(line.substring(2))],
-            }),
-          )
-        } else if (line.startsWith('## ')) {
-          paragraphs.push(
-            new Paragraph({
-              heading: HeadingLevel.HEADING_2,
-              children: [new TextRun(line.substring(3))],
-            }),
-          )
-        } else if (line.startsWith('### ')) {
-          paragraphs.push(
-            new Paragraph({
-              heading: HeadingLevel.HEADING_3,
-              children: [new TextRun(line.substring(4))],
-            }),
-          )
-        } else {
-          // 处理普通段落
-          const textRuns = []
-          let currentText = line
+      for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i]
+        console.log(`处理token ${i}:`, token.type, token)
 
-          // 简单处理粗体和斜体
-          const boldRegex = /\*\*(.*?)\*\*/g
-          const italicRegex = /\*(.*?)\*/g
+        switch (token.type) {
+          case 'heading_open':
+            // 获取下一个token（标题内容）
+            const headingContent = tokens[i + 1]
+            if (headingContent && headingContent.type === 'inline') {
+              const level = parseInt(token.tag.substring(1)) // 从h1, h2, h3等提取数字
+              const headingLevel = this.getHeadingLevel(level)
+              const elements = this.parseInlineContent(headingContent.children || [])
 
-          // 这里简化处理，实际应用中可能需要更复杂的解析
-          textRuns.push(
-            new TextRun(currentText.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1')),
-          )
+              paragraphs.push(
+                new Paragraph({
+                  heading: headingLevel,
+                  children:
+                    elements.length > 0 ? elements : [new TextRun(headingContent.content || '')],
+                }),
+              )
+            }
+            i += 2 // 跳过内容和closing tag
+            break
 
-          paragraphs.push(new Paragraph({ children: textRuns }))
+          case 'paragraph_open':
+            // 获取段落内容
+            const paragraphContent = tokens[i + 1]
+            if (paragraphContent && paragraphContent.type === 'inline') {
+              // 检查这个inline内容是否包含图片
+              if (paragraphContent.children) {
+                const hasImage = paragraphContent.children.some((child) => child.type === 'image')
+                console.log('段落包含图片:', hasImage)
+                if (hasImage) {
+                  console.log('段落children:', paragraphContent.children)
+                }
+              }
+
+              const elements = this.parseInlineContent(paragraphContent.children || [])
+              paragraphs.push(
+                new Paragraph({
+                  children:
+                    elements.length > 0 ? elements : [new TextRun(paragraphContent.content || '')],
+                }),
+              )
+            }
+            i += 2 // 跳过内容和closing tag
+            break
+
+          case 'bullet_list_open':
+          case 'ordered_list_open':
+            // 处理列表
+            const listItems = this.parseListItems(tokens, i)
+            paragraphs.push(...listItems.paragraphs)
+            i = listItems.nextIndex - 1 // 调整索引，因为外层循环会+1
+            break
+
+          case 'blockquote_open':
+            // 处理引用块
+            const blockquoteItems = this.parseBlockquote(tokens, i)
+            paragraphs.push(...blockquoteItems.paragraphs)
+            i = blockquoteItems.nextIndex - 1
+            break
+
+          case 'code_block':
+          case 'fence':
+            // 处理代码块
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: token.content,
+                    font: { name: 'Consolas' },
+                    size: 20,
+                  }),
+                ],
+              }),
+            )
+            break
+
+          case 'hr':
+            // 处理分割线
+            paragraphs.push(
+              new Paragraph({
+                children: [new TextRun('─'.repeat(50))],
+              }),
+            )
+            break
+
+          case 'image':
+            // 处理图片
+            console.log('处理图片token:', token)
+            let src, alt
+
+            // 尝试不同方式获取图片属性
+            if (token.attrGet) {
+              src = token.attrGet('src')
+              alt = token.attrGet('alt')
+            } else if (token.attrs) {
+              // 从attrs数组中查找src和alt
+              const srcAttr = token.attrs.find((attr) => attr[0] === 'src')
+              const altAttr = token.attrs.find((attr) => attr[0] === 'alt')
+              src = srcAttr ? srcAttr[1] : null
+              alt = altAttr ? altAttr[1] : null
+            }
+
+            // 如果还是没找到，尝试从children中获取
+            if (!src && token.children) {
+              for (const child of token.children) {
+                if (child.type === 'image' && child.attrGet) {
+                  src = child.attrGet('src')
+                  alt = child.attrGet('alt')
+                  break
+                }
+              }
+            }
+
+            alt = alt || '图片'
+            console.log('图片信息:', { src: src?.substring(0, 50) + '...', alt })
+
+            // 处理 base64 图片
+            if (src && src.startsWith('data:image/')) {
+              try {
+                console.log('开始处理base64图片...')
+                const imageData = this.base64ToArrayBuffer(src)
+                console.log('图片数据长度:', imageData.length)
+
+                const imageRun = new ImageRun({
+                  data: imageData,
+                  transformation: {
+                    width: 600,
+                    height: 400,
+                  },
+                })
+
+                paragraphs.push(
+                  new Paragraph({
+                    children: [imageRun],
+                  }),
+                )
+                console.log('图片添加成功')
+              } catch (error) {
+                console.error('处理图片失败:', error)
+                // 如果图片处理失败，添加文本说明
+                paragraphs.push(
+                  new Paragraph({
+                    children: [new TextRun(`[图片: ${alt}]`)],
+                  }),
+                )
+              }
+            } else {
+              console.log('未找到有效的图片src或不是base64格式')
+              paragraphs.push(
+                new Paragraph({
+                  children: [new TextRun(`[图片: ${alt}]`)],
+                }),
+              )
+            }
+            break
         }
       }
 
+      // 如果没有解析到任何内容，返回原始文本
+      if (paragraphs.length === 0) {
+        return [new Paragraph({ children: [new TextRun(markdown)] })]
+      }
+
       return paragraphs
+    },
+
+    // 获取标题级别
+    getHeadingLevel(level) {
+      switch (level) {
+        case 1:
+          return HeadingLevel.HEADING_1
+        case 2:
+          return HeadingLevel.HEADING_2
+        case 3:
+          return HeadingLevel.HEADING_3
+        case 4:
+          return HeadingLevel.HEADING_4
+        case 5:
+          return HeadingLevel.HEADING_5
+        case 6:
+          return HeadingLevel.HEADING_6
+        default:
+          return HeadingLevel.HEADING_1
+      }
+    },
+
+    // 解析内联内容（粗体、斜体、图片等）
+    parseInlineContent(children) {
+      const elements = []
+
+      for (const child of children) {
+        console.log('parseInlineContent处理child:', child.type, child)
+
+        switch (child.type) {
+          case 'text':
+            elements.push(new TextRun(child.content))
+            break
+
+          case 'image':
+            // 处理图片
+            console.log('在inline内容中发现图片:', child)
+            let src, alt
+
+            // 尝试不同方式获取图片属性
+            if (child.attrGet) {
+              src = child.attrGet('src')
+              alt = child.attrGet('alt')
+            } else if (child.attrs) {
+              const srcAttr = child.attrs.find((attr) => attr[0] === 'src')
+              const altAttr = child.attrs.find((attr) => attr[0] === 'alt')
+              src = srcAttr ? srcAttr[1] : null
+              alt = altAttr ? altAttr[1] : null
+            }
+
+            alt = alt || '图片'
+            console.log('inline图片信息:', { src: src?.substring(0, 50) + '...', alt })
+
+            // 处理 base64 图片
+            if (src && src.startsWith('data:image/')) {
+              try {
+                console.log('开始处理inline中的base64图片...')
+                const imageData = this.base64ToArrayBuffer(src)
+                console.log('inline图片数据长度:', imageData.length)
+
+                const imageRun = new ImageRun({
+                  data: imageData,
+                  transformation: {
+                    width: 600,
+                    height: 400,
+                  },
+                })
+
+                elements.push(imageRun)
+                console.log('inline图片添加成功')
+              } catch (error) {
+                console.error('处理inline图片失败:', error)
+                elements.push(new TextRun(`[图片: ${alt}]`))
+              }
+            } else {
+              console.log('inline中未找到有效的图片src或不是base64格式')
+              elements.push(new TextRun(`[图片: ${alt}]`))
+            }
+            break
+
+          case 'strong_open':
+          case 'em_open':
+            // 查找对应的关闭标签和中间内容
+            const closeTag = child.type === 'strong_open' ? 'strong_close' : 'em_close'
+            const content = this.findContentBetweenTags(children, child, closeTag)
+            if (content) {
+              elements.push(
+                new TextRun({
+                  text: content,
+                  bold: child.type === 'strong_open',
+                  italics: child.type === 'em_open',
+                }),
+              )
+            }
+            break
+
+          case 'code_inline':
+            elements.push(
+              new TextRun({
+                text: child.content,
+                font: { name: 'Consolas' },
+                size: 20,
+              }),
+            )
+            break
+
+          default:
+            if (child.content) {
+              elements.push(new TextRun(child.content))
+            }
+        }
+      }
+
+      return elements
+    },
+
+    // 查找标签之间的内容
+    findContentBetweenTags(children, openTag, closeTagType) {
+      const openIndex = children.indexOf(openTag)
+      const closeIndex = children.findIndex(
+        (child, index) => index > openIndex && child.type === closeTagType,
+      )
+
+      if (closeIndex > openIndex) {
+        return children
+          .slice(openIndex + 1, closeIndex)
+          .map((child) => child.content || '')
+          .join('')
+      }
+
+      return null
+    },
+
+    // 解析列表项
+    parseListItems(tokens, startIndex) {
+      const paragraphs = []
+      let i = startIndex + 1 // 跳过list_open
+
+      while (
+        i < tokens.length &&
+        tokens[i].type !== 'bullet_list_close' &&
+        tokens[i].type !== 'ordered_list_close'
+      ) {
+        if (tokens[i].type === 'list_item_open') {
+          const itemContent = tokens[i + 1]
+          if (itemContent && itemContent.type === 'paragraph_open') {
+            const itemText = tokens[i + 2]
+            if (itemText && itemText.type === 'inline') {
+              const elements = this.parseInlineContent(itemText.children || [])
+              paragraphs.push(
+                new Paragraph({
+                  children: [
+                    new TextRun('• '), // 添加项目符号
+                    ...(elements.length > 0 ? elements : [new TextRun(itemText.content || '')]),
+                  ],
+                }),
+              )
+            }
+            i += 4 // 跳过paragraph_open, inline, paragraph_close, list_item_close
+          } else {
+            i++
+          }
+        } else {
+          i++
+        }
+      }
+
+      return { paragraphs, nextIndex: i + 1 }
+    },
+
+    // 解析引用块
+    parseBlockquote(tokens, startIndex) {
+      const paragraphs = []
+      let i = startIndex + 1 // 跳过blockquote_open
+
+      while (i < tokens.length && tokens[i].type !== 'blockquote_close') {
+        if (tokens[i].type === 'paragraph_open') {
+          const quoteContent = tokens[i + 1]
+          if (quoteContent && quoteContent.type === 'inline') {
+            const elements = this.parseInlineContent(quoteContent.children || [])
+            paragraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: '> ',
+                    italics: true,
+                  }),
+                  ...(elements.length > 0
+                    ? elements
+                    : [
+                        new TextRun({
+                          text: quoteContent.content || '',
+                          italics: true,
+                        }),
+                      ]),
+                ],
+              }),
+            )
+          }
+          i += 3 // 跳过paragraph_open, inline, paragraph_close
+        } else {
+          i++
+        }
+      }
+
+      return { paragraphs, nextIndex: i + 1 }
+    },
+
+    // 将 base64 转换为 Uint8Array
+    base64ToArrayBuffer(base64) {
+      try {
+        // 提取 base64 数据部分（去掉 data:image/...;base64, 前缀）
+        const base64Data = base64.split(',')[1]
+        if (!base64Data) {
+          throw new Error('无效的base64格式')
+        }
+
+        const binaryString = window.atob(base64Data)
+        const len = binaryString.length
+        const bytes = new Uint8Array(len)
+
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
+
+        console.log('Base64转换成功，数据长度:', bytes.length)
+        return bytes // 返回 Uint8Array 而不是 bytes.buffer
+      } catch (error) {
+        console.error('Base64转换失败:', error)
+        throw error
+      }
     },
   },
 
