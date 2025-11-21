@@ -7,6 +7,66 @@ const router = useRouter()
 const goToDemo = () => {
   router.push('/demo')
 }
+
+const scrollToEditor = () => {
+  const editor = document.querySelector('.rich-text-editor')
+  if (editor) {
+    editor.scrollIntoView({ behavior: 'smooth' })
+  }
+}
+
+// 文档列表（增强版：支持章节定位）
+const documents = [
+  {
+    name: 'example',
+    title: 'Vue 3 富文本编辑器项目文档',
+    description: '完整的项目文档，包含技术架构、功能详解等',
+    highlights: [
+      { text: '技术架构', section: '技术架构' },
+      { text: 'ToastUI Editor', section: '编辑器集成' },
+      { text: '代码高亮', section: '代码块' },
+      { text: '最佳实践', section: '最佳实践' },
+    ],
+  },
+  {
+    name: 'getting-started',
+    title: '快速开始指南',
+    description: '快速上手指南，帮助您开始使用编辑器',
+    highlights: [
+      { text: '安装', section: '第一步：安装' },
+      { text: '快捷键', section: '基本操作' },
+      { text: '基本操作', section: '第三步：开始编辑' },
+    ],
+  },
+  {
+    name: 'duplicate-test',
+    title: '重复文本测试文档',
+    description: '测试精准定位功能，包含多个重复的关键词',
+    highlights: [
+      { text: 'Vue 3', section: '前端开发' },
+      { text: 'Vue 3', section: '全栈开发' },
+      { text: '最佳实践', section: '最佳实践' },
+      { text: '性能优化', section: '性能优化' },
+    ],
+  },
+]
+
+// 增强的文档查看函数，支持章节定位、上下文、指定匹配项
+const viewDocument = (docName, highlight = '', section = '', context = '', index = 1) => {
+  const query = {
+    doc: docName,
+  }
+
+  if (highlight) query.highlight = highlight
+  if (section) query.section = section
+  if (context) query.context = context
+  if (index > 1) query.index = index
+
+  router.push({
+    path: '/markdown',
+    query,
+  })
+}
 </script>
 
 <template>
@@ -100,6 +160,63 @@ const goToDemo = () => {
       </div>
     </div>
 
+    <!-- 文档查看功能展示 -->
+    <div class="bg-white rounded-lg shadow-lg p-8">
+      <h2 class="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+        <span>📚</span>
+        <span>Markdown 文档查看器</span>
+      </h2>
+      <p class="text-gray-600 mb-6">
+        支持加载 Markdown 文档并高亮指定文本内容。点击下方链接体验文档查看和文本高亮功能。
+      </p>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div
+          v-for="doc in documents"
+          :key="doc.name"
+          class="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow duration-300"
+        >
+          <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ doc.title }}</h3>
+          <p class="text-gray-600 text-sm mb-4">{{ doc.description }}</p>
+
+          <div class="mb-4">
+            <p class="text-xs text-gray-500 mb-2">🎯 精准定位（点击标签跳转到指定章节并高亮）：</p>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="(highlight, idx) in doc.highlights"
+                :key="idx"
+                @click="viewDocument(doc.name, highlight.text, highlight.section)"
+                class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs hover:bg-yellow-200 transition-colors flex items-center gap-1"
+                :title="`在「${highlight.section}」章节中高亮「${highlight.text}」`"
+              >
+                <span class="opacity-60">§</span>
+                <span>{{ highlight.text }}</span>
+              </button>
+            </div>
+          </div>
+
+          <button
+            @click="viewDocument(doc.name)"
+            class="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors duration-200"
+          >
+            查看完整文档
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <p class="text-sm text-blue-800 mb-3">
+          <strong>💡 新特性：精准定位系统</strong>
+        </p>
+        <ul class="text-sm text-blue-700 space-y-1 ml-4">
+          <li>✓ <strong>章节定位</strong>：自动定位到指定章节，避免重复文本的混淆</li>
+          <li>✓ <strong>多项高亮</strong>：同时显示所有匹配项，主要目标高亮更明显</li>
+          <li>✓ <strong>上下文匹配</strong>：通过上下文更精确地定位文本</li>
+          <li>✓ <strong>索引选择</strong>：指定高亮第几个匹配项</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- CTA Section -->
     <div class="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg p-8 text-center text-white">
       <h2 class="text-2xl font-bold mb-4">开始使用富文本编辑器</h2>
@@ -121,6 +238,3 @@ const goToDemo = () => {
     </div>
   </div>
 </template>
-
-const scrollToEditor = () => { const editor = document.querySelector('.rich-text-editor') if
-(editor) { editor.scrollIntoView({ behavior: 'smooth' }) } }

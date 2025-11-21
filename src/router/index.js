@@ -22,6 +22,13 @@ const router = createRouter({
       // which is lazy-loaded when the route is visited.
       component: () => import('../views/AboutView.vue'),
     },
+    {
+      path: '/markdown',
+      name: 'markdown',
+      // Markdown文档查看页面，支持文档名称和高亮文本参数
+      // 示例: /markdown?doc=example&highlight=文本内容
+      component: () => import('../views/MarkdownView.vue'),
+    },
   ],
 })
 

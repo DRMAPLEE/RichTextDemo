@@ -4,6 +4,8 @@
 
 ## ✨ 主要特性
 
+### 核心编辑功能
+
 - 🎯 **双模式编辑**: 支持 WYSIWYG（所见即所得）和 Markdown 模式
 - 🎨 **丰富格式**: 文本格式化、标题、列表、表格、图片、链接等
 - 💻 **代码高亮**: 支持多种编程语言的语法高亮
@@ -13,6 +15,16 @@
 - 📤 **内容导出**: 支持导出 Markdown 格式
 - ⌨️ **快捷键**: 支持常用编辑快捷键
 - 📱 **响应式设计**: 适配各种屏幕尺寸
+
+### 🆕 Markdown 文档查看器 v2.0（新功能）
+
+- 📚 **文档渲染**: 自动加载并渲染 Markdown 文档为 HTML
+- 🎯 **精准定位**: 支持章节定位、上下文匹配、索引选择
+- ✨ **智能高亮**: 自动高亮指定文本，支持重复文本区分
+- 🎨 **双重高亮**: 主目标突出显示，其他匹配项次要显示
+- 🔗 **URL 参数**: 通过 URL 参数控制文档加载和文本高亮
+- 📍 **自动滚动**: 高亮后自动滚动到目标位置
+- 💡 **用户友好**: 优雅的动画效果和错误提示
 
 ## 🚀 快速开始
 
@@ -32,6 +44,8 @@ npm run dev
 pnpm dev
 ```
 
+访问 `http://localhost:5173` 查看应用
+
 ### 构建生产版本
 
 ```bash
@@ -39,6 +53,68 @@ npm run build
 # 或
 pnpm build
 ```
+
+## 📖 Markdown 文档查看器使用
+
+### 基础用法
+
+```bash
+# 查看文档
+http://localhost:5173/markdown?doc=example
+
+# 高亮文本
+http://localhost:5173/markdown?doc=example&highlight=Vue 3
+```
+
+### 精准定位（v2.0 新功能）
+
+```bash
+# 章节定位 - 定位到特定章节中的文本
+http://localhost:5173/markdown?doc=example&highlight=Vue 3&section=技术架构
+
+# 索引选择 - 高亮第2个匹配项
+http://localhost:5173/markdown?doc=example&highlight=Vue 3&index=2
+
+# 上下文匹配 - 通过上下文精确定位
+http://localhost:5173/markdown?doc=example&highlight=Vue 3&context=作为核心框架
+
+# 组合使用 - 最精确的定位
+http://localhost:5173/markdown?doc=example&highlight=Vue 3&section=技术架构&index=1
+```
+
+### URL 参数说明
+
+| 参数 | 必填 | 说明 | 示例 |
+|------|------|------|------|
+| `doc` | ✅ | 文档名称（不含 .md） | `example` |
+| `highlight` | ❌ | 要高亮的文本 | `Vue 3` |
+| `section` | ❌ | 所属章节标题 | `技术架构` |
+| `context` | ❌ | 文本上下文 | `作为核心框架` |
+| `index` | ❌ | 第N个匹配项 | `2` |
+
+### 在代码中使用
+
+```javascript
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+// 章节定位
+router.push({
+  path: '/markdown',
+  query: {
+    doc: 'example',
+    highlight: 'Vue 3',
+    section: '技术架构'
+  }
+})
+```
+
+详细文档：
+- [快速参考](QUICK_REFERENCE.md) - 参数速查表
+- [高级定位](ADVANCED_POSITIONING.md) - 完整技术文档
+- [升级说明](UPGRADE_NOTES.md) - v2.0 新功能说明
+- [解决方案](SOLUTION_SUMMARY.md) - 设计思路和实现
 
 ## 🛠️ 技术栈
 
@@ -194,13 +270,52 @@ A: 支持现代浏览器，包括 Chrome、Firefox、Safari、Edge
 
 欢迎提交 Issue 和 Pull Request！
 
+## 📁 项目结构
+
+```
+richtext/
+├── src/
+│   ├── components/
+│   │   └── RichTextEditor.vue      # 富文本编辑器组件
+│   ├── views/
+│   │   ├── HomeView.vue             # 首页
+│   │   ├── DemoView.vue             # 演示页面
+│   │   ├── AboutView.vue            # 关于页面
+│   │   └── MarkdownView.vue         # Markdown 查看器（新）
+│   └── router/
+│       └── index.js                 # 路由配置
+├── public/
+│   └── docs/                        # Markdown 文档目录
+│       ├── example.md               # 示例文档
+│       ├── getting-started.md       # 快速开始
+│       └── duplicate-test.md        # 测试文档
+├── QUICK_REFERENCE.md               # 快速参考
+├── ADVANCED_POSITIONING.md          # 高级定位文档
+├── UPGRADE_NOTES.md                 # 升级说明
+└── SOLUTION_SUMMARY.md              # 解决方案总结
+```
+
 ## 📚 相关链接
+
+### 官方文档
 
 - [ToastUI Editor 官方文档](https://nhn.github.io/tui.editor/latest/)
 - [Vue 3 官方文档](https://vuejs.org/)
 - [Tailwind CSS 官方文档](https://tailwindcss.com/)
 - [Prism.js 官方文档](https://prismjs.com/)
 
+### 项目文档
+
+- [快速参考](QUICK_REFERENCE.md) - Markdown 查看器参数速查
+- [高级定位](ADVANCED_POSITIONING.md) - 精准定位系统详解
+- [升级说明](UPGRADE_NOTES.md) - v2.0 功能升级说明
+- [解决方案](SOLUTION_SUMMARY.md) - 重复文本定位解决方案
+- [使用指南](MARKDOWN_VIEWER_USAGE.md) - Markdown 查看器使用指南
+- [技术文档](MARKDOWN_VIEWER.md) - 技术实现详解
+
 ---
 
 🎉 享受使用 ToastUI 富文本编辑器的愉快体验！
+
+**版本**: v2.0 - 精准定位系统  
+**更新时间**: 2025-11-20
