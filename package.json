@@ -14,9 +14,13 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@tiptap/extension-highlight": "^3.11.0",
+    "@tiptap/starter-kit": "^3.11.0",
+    "@tiptap/vue-3": "^3.11.0",
     "@toast-ui/editor": "^3.2.2",
     "@toast-ui/editor-plugin-code-syntax-highlight": "^3.1.0",
     "@toast-ui/editor-plugin-color-syntax": "^3.1.0",
+    "diff-match-patch": "^1.0.5",
     "docx": "^9.5.1",
     "echarts": "^6.0.0",
     "html2canvas": "^1.4.1",

@@ -8,6 +8,10 @@ const goToDemo = () => {
   router.push('/demo')
 }
 
+const goToDiff = () => {
+  router.push('/diff')
+}
+
 const scrollToEditor = () => {
   const editor = document.querySelector('.rich-text-editor')
   if (editor) {
@@ -157,6 +161,27 @@ const viewDocument = (docName, highlight = '', section = '', context = '', index
         </div>
         <h3 class="text-lg font-semibold text-gray-900 mb-2">易于集成</h3>
         <p class="text-gray-600">基于Vue 3组件化设计，轻松集成到现有项目中</p>
+      </div>
+
+      <div 
+        @click="goToDiff"
+        class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-300 cursor-pointer border-2 border-purple-200 hover:border-purple-400"
+      >
+        <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+          <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+            ></path>
+          </svg>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">文本对比 🆕</h3>
+        <p class="text-gray-600">类似 Cursor 的文本对比功能，可接受或拒绝更改块</p>
+        <div class="mt-4 text-purple-600 font-medium text-sm">
+          点击体验 →
+        </div>
       </div>
     </div>
 

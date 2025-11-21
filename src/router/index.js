@@ -29,6 +29,12 @@ const router = createRouter({
       // 示例: /markdown?doc=example&highlight=文本内容
       component: () => import('../views/MarkdownView.vue'),
     },
+    {
+      path: '/diff',
+      name: 'diff',
+      // 文本对比编辑器，类似Cursor的diff功能
+      component: () => import('../views/DiffView.vue'),
+    },
   ],
 })
 
